@@ -2,6 +2,10 @@
 
 ![architecture_diagram](https://github.com/user-attachments/assets/d2b8e9a0-a5ca-47db-89cc-750319dcedf7)
 
+## If a pluggable unstructured.io document processing module is added
+
+![updated_architecture_diagram](https://github.com/user-attachments/assets/dd9d4e26-95bb-45f9-969e-4856442541e9)
+
 
 ## System Architecture
 
