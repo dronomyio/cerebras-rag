@@ -1,5 +1,8 @@
 # Cerebras RAG Application Architecture
 
+![architecture_diagram](https://github.com/user-attachments/assets/d2b8e9a0-a5ca-47db-89cc-750319dcedf7)
+
+
 ## System Architecture
 
 The application follows a microservices architecture with the following components:
