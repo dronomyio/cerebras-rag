@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  # Weaviate vector database
+  weaviate:
+    image: semitechnologies/weaviate:1.24.1
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "false"
+      AUTHENTICATION_APIKEY_ENABLED: "true"
+      AUTHENTICATION_APIKEY_ALLOWED_KEYS: ${WEAVIATE_ADMIN_KEY}
+      AUTHENTICATION_APIKEY_USERS: admin
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "text2vec-transformers"
+      ENABLE_MODULES: "text2vec-transformers"
+      TRANSFORMERS_INFERENCE_API: "http://t2v-transformers:8080"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    depends_on:
+      - t2v-transformers
+    networks:
+      - cerebras-rag-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Text2Vec Transformers module for Weaviate
+  t2v-transformers:
+    image: semitechnologies/transformers-inference:sentence-transformers-all-mpnet-base-v2
+    environment:
+      ENABLE_CUDA: "0"
+    networks:
+      - cerebras-rag-network
+    restart: unless-stopped
+
+  # Redis for session management and caching
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    networks:
+      - cerebras-rag-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PDF Processor service
+  pdf-processor:
+    build:
+      context: ./pdf-processor
+      dockerfile: Dockerfile
+    volumes:
+      - ./pdf-processor:/app
+      - ./data:/data
+      - ${RUPPERT_PDF_PATH}:/data/ruppert.pdf:ro
+    environment:
+      - WEAVIATE_URL=http://weaviate:8080
+      - WEAVIATE_API_KEY=${WEAVIATE_ADMIN_KEY}
+    networks:
+      - cerebras-rag-network
+    depends_on:
+      - weaviate
+    restart: on-failure
+
+  # Code Executor service
+  code-executor:
+    build:
+      context: ./code-executor
+      dockerfile: Dockerfile
+    privileged: true  # Required for Docker-in-Docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./code-executor:/app
+    environment:
+      - MAX_EXECUTION_TIME=30
+      - MAX_MEMORY=512m
+    networks:
+      - cerebras-rag-network
+    restart: unless-stopped
+
+  # Web Application
+  webapp:
+    build:
+      context: ./webapp
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./webapp:/app
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=production
+      - SECRET_KEY=${WEBAPP_SECRET_KEY}
+      - WEAVIATE_URL=http://weaviate:8080
+      - WEAVIATE_API_KEY=${WEAVIATE_ADMIN_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
+      - CEREBRAS_API_URL=${CEREBRAS_API_URL}
+      - CODE_EXECUTOR_URL=http://code-executor:5000
+    networks:
+      - cerebras-rag-network
+    depends_on:
+      - weaviate
+      - redis
+      - code-executor
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # NGINX for SSL termination and serving static files
+  nginx:
+    image: nginx:1.25-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx/www:/usr/share/nginx/html
+    depends_on:
+      - webapp
+    networks:
+      - cerebras-rag-network
+    restart: unless-stopped
+
+networks:
+  cerebras-rag-network:
+    driver: bridge
+
+volumes:
+  weaviate_data:
+  redis_data:

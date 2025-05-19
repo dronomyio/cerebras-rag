@@ -1,0 +1,6 @@
+nltk==3.9.1
+weaviate-client==4.5.0
+python-dotenv==1.0.0
+requests==2.31.0
+tqdm==4.67.1
+PyMuPDF==1.23.8

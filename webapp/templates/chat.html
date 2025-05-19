@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cerebras RAG - Financial Engineering Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .navbar {
+            flex-shrink: 0;
+            background-color: #343a40;
+        }
+        .navbar-brand {
+            font-weight: 700;
+        }
+        .navbar-brand span {
+            color: #007bff;
+        }
+        .content-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 280px;
+            background-color: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .sidebar-header {
+            padding: 1rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .conversation-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+        .conversation-item {
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .conversation-item:hover {
+            background-color: #e9ecef;
+        }
+        .conversation-item.active {
+            background-color: #e9ecef;
+        }
+        .sidebar-footer {
+            padding: 1rem;
+            border-top: 1px solid #dee2e6;
+        }
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .chat-header {
+            padding: 1rem;
+            border-bottom: 1px solid #dee2e6;
+            background-color: white;
+        }
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background-color: #f8f9fa;
+        }
+        .message {
+            max-width: 80%;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 0.5rem;
+        }
+        .message-user {
+            background-color: #007bff;
+            color: white;
+            margin-left: auto;
+        }
+        .message-assistant {
+            background-color: white;
+            border: 1px solid #dee2e6;
+        }
+        .message-sources {
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+            color: #6c757d;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            margin: 0.5rem 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .code-block-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.25rem;
+        }
+        .code-block-language {
+            font-weight: bold;
+        }
+        .code-block-actions button {
+            padding: 0.1rem 0.3rem;
+            font-size: 0.8rem;
+        }
+        .input-container {
+            padding: 1rem;
+            border-top: 1px solid #dee2e6;
+            background-color: white;
+        }
+        .input-group {
+            position: relative;
+        }
+        .form-control {
+            border-radius: 1.5rem;
+            padding-right: 4rem;
+        }
+        .btn-send {
+            position: absolute;
+            right: 0.5rem;
+            top: 0.5rem;
+            border-radius: 50%;
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+        }
+        .welcome-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 2rem;
+        }
+        .welcome-container h2 {
+            margin-bottom: 1rem;
+        }
+        .welcome-container p {
+            max-width: 600px;
+            margin-bottom: 2rem;
+        }
+        .welcome-examples {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            width: 100%;
+            max-width: 800px;
+        }
+        .example-card {
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .example-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Cerebras<span>RAG</span></a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <span class="nav-link">Welcome, {{ username }}</span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="content-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h5 class="mb-0">Conversations</h5>
+            </div>
+            <div class="conversation-list" id="conversation-list">
+                <!-- Conversations will be loaded here -->
+            </div>
+            <div class="sidebar-footer">
+                <button class="btn btn-primary w-100" id="new-conversation-btn">
+                    <i class="bi bi-plus-lg me-2"></i>New Conversation
+                </button>
+            </div>
+        </div>
+        
+        <div class="chat-container">
+            <div id="welcome-screen" class="welcome-container">
+                <h2>Welcome to Cerebras RAG</h2>
+                <p>Your AI-powered financial engineering assistant based on Ruppert's "Statistics and Data Analysis for Financial Engineering" book. Ask questions about statistical methods, financial models, or code examples.</p>
+                
+                <div class="welcome-examples">
+                    <div class="example-card" onclick="useExample('Explain GARCH models for volatility forecasting in financial time series')">
+                        <h5>GARCH Models</h5>
+                        <p>Explain GARCH models for volatility forecasting in financial time series</p>
+                    </div>
+                    <div class="example-card" onclick="useExample('How do I implement a Monte Carlo simulation for option pricing in R?')">
+                        <h5>Monte Carlo Simulation</h5>
+                        <p>How do I implement a Monte Carlo simulation for option pricing in R?</p>
+                    </div>
+                    <div class="example-card" onclick="useExample('What statistical tests should I use to check for stationarity in time series data?')">
+                        <h5>Stationarity Tests</h5>
+                        <p>What statistical tests should I use to check for stationarity in time series data?</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="chat-interface" style="display: none; height: 100%; display: flex; flex-direction: column;">
+                <div class="chat-header">
+                    <h5 class="mb-0" id="conversation-title">New Conversation</h5>
+                </div>
+                
+                <div class="messages-container" id="messages-container">
+                    <!-- Messages will be displayed here -->
+                </div>
+                
+                <div class="input-container">
+                    <div class="input-group">
+                        <textarea class="form-control" id="message-input" placeholder="Ask about financial engineering concepts..." rows="1"></textarea>
+                        <button class="btn btn-primary btn-send" id="send-button">
+                            <i class="bi bi-send"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Code Execution Modal -->
+    <div class="modal fade" id="codeExecutionModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Execute Code</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="code-language" class="form-label">Language</label>
+                        <select class="form-select" id="code-language">
+                            <option value="python">Python</option>
+                            <option value="r">R</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="code-editor" class="form-label">Code</label>
+                        <textarea class="form-control" id="code-editor" rows="10"></textarea>
+                    </div>
+                    <div id="execution-result" style="display: none;">
+                        <h6>Result:</h6>
+                        <div class="card">
+                            <div class="card-body">
+                                <pre id="execution-output"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="execute-code-btn">Execute</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script>
+        // DOM Elements
+        const conversationList = document.getElementById('conversation-list');
+        const newConversationBtn = document.getElementById('new-conversation-btn');
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const chatInterface = document.getElementById('chat-interface');
+        const conversationTitle = document.getElementById('conversation-title');
+        const messagesContainer = document.getElementById('messages-container');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        
+        // Code execution modal elements
+        const codeExecutionModal = new bootstrap.Modal(document.getElementById('codeExecutionModal'));
+        const codeLanguage = document.getElementById('code-language');
+        const codeEditor = document.getElementById('code-editor');
+        const executeCodeBtn = document.getElementById('execute-code-btn');
+        const executionResult = document.getElementById('execution-result');
+        const executionOutput = document.getElementById('execution-output');
+        
+        // Socket.IO connection
+        const socket = io();
+        
+        // Current conversation state
+        let currentConversationId = null;
+        let conversations = [];
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadConversations();
+            
+            // Auto-resize textarea
+            messageInput.addEventListener('input', () => {
+                messageInput.style.height = 'auto';
+                messageInput.style.height = (messageInput.scrollHeight) + 'px';
+            });
+            
+            // Send message on Enter (but allow Shift+Enter for new lines)
+            messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            // Send button click
+            sendButton.addEventListener('click', sendMessage);
+            
+            // New conversation button
+            newConversationBtn.addEventListener('click', createNewConversation);
+            
+            // Execute code button
+            executeCodeBtn.addEventListener('click', executeCode);
+        });
+        
+        // Socket.IO events
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+        });
+        
+        socket.on('conversation_created', (data) => {
+            currentConversationId = data.id;
+            showChatInterface();
+        });
+        
+        socket.on('message', (data) => {
+            addMessage('assistant', data.message, data.sources);
+            scrollToBottom();
+            
+            // Update conversation list
+            loadConversations();
+        });
+        
+        socket.on('error', (data) => {
+            console.error('Error:', data.message);
+            // Show error message to user
+            addSystemMessage('Error: ' + data.message);
+        });
+        
+        // Functions
+        function loadConversations() {
+            fetch('/api/conversations')
+                .then(response => response.json())
+                .then(data => {
+                    conversations = data.conversations;
+                    renderConversationList();
+                })
+                .catch(error => console.error('Error loading conversations:', error));
+        }
+        
+        function renderConversationList() {
+            conversationList.innerHTML = '';
+            
+            if (conversations.length === 0) {
+                const emptyMessage = document.createElement('div');
+                emptyMessage.className = 'text-center text-muted p-3';
+                emptyMessage.textContent = 'No conversations yet';
+                conversationList.appendChild(emptyMessage);
+                return;
+            }
+            
+            conversations.forEach(conversation => {
+                const item = document.createElement('div');
+                item.className = 'conversation-item';
+                if (conversation.id === currentConversationId) {
+                    item.classList.add('active');
+                }
+                
+                item.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="conversation-title">${conversation.title}</div>
+                        <small class="text-muted">${formatDate(conversation.timestamp)}</small>
+                    </div>
+                `;
+                
+                item.addEventListener('click', () => loadConversation(conversation.id));
+                conversationList.appendChild(item);
+            });
+        }
+        
+        function formatDate(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleDateString();
+        }
+        
+        function createNewConversation() {
+            socket.emit('new_conversation');
+        }
+        
+        function loadConversation(conversationId) {
+            fetch(`/api/conversation?id=${conversationId}`)
+                .then(response => response.json())
+                .then(data => {
+                    currentConversationId = conversationId;
+                    showChatInterface();
+                    
+                    // Clear messages
+                    messagesContainer.innerHTML = '';
+                    
+                    // Add messages
+                    data.conversation.forEach(message => {
+                        if (message.role === 'user') {
+                            addMessage('user', message.content);
+                        } else if (message.role === 'assistant') {
+                            addMessage('assistant', message.content, message.sources);
+                        }
+                    });
+                    
+                    // Update active conversation in list
+                    renderConversationList();
+                    
+                    // Update title
+                    if (data.conversation.length > 0 && data.conversation[0].role === 'user') {
+                        conversationTitle.textContent = data.conversation[0].content.substring(0, 30) + '...';
+                    }
+                    
+                    scrollToBottom();
+                })
+                .catch(error => console.error('Error loading conversation:', error));
+        }
+        
+        function showChatInterface() {
+            welcomeScreen.style.display = 'none';
+            chatInterface.style.display = 'flex';
+        }
+        
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            if (!currentConversationId) {
+                createNewConversation();
+                return;
+            }
+            
+            // Add user message to UI
+            addMessage('user', message);
+            
+            // Clear input
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+            
+            // Add loading indicator
+            addLoadingMessage();
+            
+            // Send to server
+            socket.emit('message', {
+                message: message,
+                conversation_id: currentConversationId
+            });
+            
+            // Update title for new conversations
+            if (messagesContainer.querySelectorAll('.message').length === 1) {
+                conversationTitle.textContent = message.substring(0, 30) + '...';
+            }
+            
+            scrollToBottom();
+        }
+        
+        function addMessage(role, content, sources = null) {
+            // Remove loading message if present
+            const loadingMessage = messagesContainer.querySelector('.message-loading');
+            if (loadingMessage) {
+                messagesContainer.removeChild(loadingMessage);
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message message-${role}`;
+            
+            // Process content for code blocks
+            const processedContent = processCodeBlocks(content);
+            messageDiv.innerHTML = processedContent;
+            
+            // Add sources if available
+            if (sources && role === 'assistant') {
+                const sourcesDiv = document.createElement('div');
+                sourcesDiv.className = 'message-sources';
+                
+                const sourcesList = sources.map(source => {
+                    let sourceText = `Chapter ${source.chapter}`;
+                    if (source.chapterTitle) {
+                        sourceText += `: ${source.chapterTitle}`;
+                    }
+                    if (source.section && source.section !== 'N/A') {
+                        sourceText += `, Section ${source.section}`;
+                        if (source.sectionTitle) {
+                            sourceText += `: ${source.sectionTitle}`;
+                        }
+                    }
+                    return sourceText;
+                });
+                
+                sourcesDiv.textContent = 'Sources: ' + sourcesList.join('; ');
+                messageDiv.appendChild(sourcesDiv);
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            
+            // Add event listeners to execute code buttons
+            const executeButtons = messageDiv.querySelectorAll('.execute-code-btn');
+            executeButtons.forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const codeBlock = e.target.closest('.code-block');
+                    const code = codeBlock.querySelector('code').textContent;
+                    const language = codeBlock.dataset.language;
+                    
+                    // Populate modal
+                    codeLanguage.value = language;
+                    codeEditor.value = code;
+                    executionResult.style.display = 'none';
+                    
+                    // Show modal
+                    codeExecutionModal.show();
+                });
+            });
+        }
+        
+        function addLoadingMessage() {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message message-assistant message-loading';
+            loadingDiv.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm me-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div>Thinking...</div>
+                </div>
+            `;
+            messagesContainer.appendChild(loadingDiv);
+            scrollToBottom();
+        }
+        
+        function addSystemMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'alert alert-warning mx-auto my-2';
+            messageDiv.style.maxWidth = '80%';
+            messageDiv.textContent = message;
+            messagesContainer.appendChild(messageDiv);
+            scrollToBottom();
+        }
+        
+        function processCodeBlocks(content) {
+            // Replace markdown code blocks with HTML
+            let processed = content;
+            
+            // Match code blocks with language specification
+            const codeBlockRegex = /```(\w+)\n([\s\S]*?)```/g;
+            processed = processed.replace(codeBlockRegex, (match, language, code) => {
+                return `
+                    <div class="code-block" data-language="${language}">
+                        <div class="code-block-header">
+                            <div class="code-block-language">${language}</div>
+                            <div class="code-block-actions">
+                                <button class="btn btn-sm btn-outline-primary execute-code-btn">Execute</button>
+                            </div>
+                        </div>
+                        <code>${escapeHtml(code)}</code>
+                    </div>
+                `;
+            });
+            
+            // Replace newlines with <br> for regular text
+            processed = processed.replace(/\n/g, '<br>');
+            
+            return processed;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function executeCode() {
+            const code = codeEditor.value;
+            const language = codeLanguage.value;
+            
+            if (!code) return;
+            
+            // Show loading
+            executeCodeBtn.disabled = true;
+            executeCodeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Executing...';
+            
+            // Execute code
+            fetch('/api/execute-code', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ code, language }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Show result
+                executionResult.style.display = 'block';
+                
+                if (data.success) {
+                    executionOutput.className = 'text-success';
+                    executionOutput.textContent = data.stdout || 'Execution successful (no output)';
+                } else {
+                    executionOutput.className = 'text-danger';
+                    executionOutput.textContent = data.stderr || 'Execution failed';
+                }
+            })
+            .catch(error => {
+                executionResult.style.display = 'block';
+                executionOutput.className = 'text-danger';
+                executionOutput.textContent = 'Error: ' + error.message;
+            })
+            .finally(() => {
+                // Reset button
+                executeCodeBtn.disabled = false;
+                executeCodeBtn.innerHTML = 'Execute';
+            });
+        }
+        
+        function useExample(text) {
+            if (!currentConversationId) {
+                createNewConversation();
+                // We need to wait for the conversation to be created
+                socket.once('conversation_created', () => {
+                    messageInput.value = text;
+                    sendMessage();
+                });
+            } else {
+                messageInput.value = text;
+                sendMessage();
+            }
+        }
+    </script>
+</body>
+</html>
